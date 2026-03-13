@@ -263,7 +263,7 @@ Note: Only PENDING tasks can be cancelled. Running tasks cannot be cancelled.`,
           };
         }
 
-        await queue.failTask(params.taskId as string, "Cancelled by user");
+        await queue.failTask(params.taskId as string, "Cancelled by user", false);
 
         return {
           content: [{

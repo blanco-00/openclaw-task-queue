@@ -105,7 +105,7 @@ describe("OpenClaw Tools", () => {
       expect(result.message).toContain("cancelled");
 
       const task = await queue.getTask(taskId);
-      expect(task!.status).toBe(TaskStatus.PENDING);
+      expect(task!.status).toBe(TaskStatus.FAILED);
       expect(task!.error).toContain("Cancelled");
     });
 

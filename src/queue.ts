@@ -185,13 +185,22 @@ export class TaskQueue {
     }
   }
 
-  async failTask(taskId: string, error: string): Promise<void> {
+  async failTask(taskId: string, error: string, retryable: boolean = true): Promise<void> {
     const task = await this.getTask(taskId);
     if (!task) {
       throw new Error(`Task ${taskId} not found`);
     }
 
-    if (task.retry_count >= task.max_retries) {
+    if (!retryable) {
+      const stmt = this.db.prepare(`
+        UPDATE tasks
+        SET status = 'FAILED',
+            error = ?,
+            completed_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      stmt.run(error, taskId);
+    } else if (task.retry_count >= task.max_retries) {
       const stmt = this.db.prepare(`
         UPDATE tasks
         SET status = 'DEAD',

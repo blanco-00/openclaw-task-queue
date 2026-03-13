@@ -308,14 +308,17 @@ Parameters:
 ```
 PENDING → claim() → RUNNING → complete() → COMPLETED
                     │
-                fail() │ timeout()
+              fail(retryable=true) │ timeout()
                     │
                     ▼
-                 FAILED → retry() → PENDING
+            FAILED(retryable) → retry() → PENDING
                     │
-              max_retry
+         fail(retryable=false) / max_retry
+                    │
                     ▼
                    DEAD
+
+PENDING → cancel() → FAILED (not retryable)
 ```
 
 ## Configuration
