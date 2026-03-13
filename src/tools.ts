@@ -678,4 +678,43 @@ Use this to identify tasks that can be purged.`,
       }
     }
   });
+
+  api.registerTool({
+    name: "task_repair",
+    description: `Repair historical cancelled tasks.
+
+Fixes tasks that were cancelled before the bug fix - changes PENDING tasks
+with "Cancelled" error to FAILED status.`,
+    parameters: {
+      type: "object",
+      properties: {}
+    },
+    async execute(_id: string, _params: ToolParams): Promise<ToolResult> {
+      try {
+        const repaired = await queue.repairCancelledTasks();
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              repairedCount: repaired,
+              message: `Repaired ${repaired} cancelled task(s)`
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : String(error)
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+    }
+  });
 }

@@ -390,6 +390,16 @@ export class TaskQueue {
     return stmt.all() as Array<{ id: string; status: string; error: string | null; created_at: string }>;
   }
 
+  async repairCancelledTasks(): Promise<number> {
+    const stmt = this.db.prepare(`
+      UPDATE tasks
+      SET status = 'FAILED'
+      WHERE status = 'PENDING' AND error LIKE '%Cancelled%'
+    `);
+    const result = stmt.run();
+    return result.changes;
+  }
+
   close(): void {
     this.db.close();
   }
