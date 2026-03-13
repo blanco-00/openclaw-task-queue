@@ -587,4 +587,51 @@ This helps keep the database size manageable.`,
       }
     }
   });
+
+  api.registerTool({
+    name: "task_purge",
+    description: `Permanently delete specific tasks by ID.
+
+Use this to clean up stuck or unwanted tasks from the queue.
+WARNING: This is a hard delete - task will be permanently removed.`,
+    parameters: {
+      type: "object",
+      properties: {
+        taskIds: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of task IDs to delete"
+        }
+      },
+      required: ["taskIds"]
+    },
+    async execute(_id: string, params: ToolParams): Promise<ToolResult> {
+      try {
+        const taskIds = params.taskIds as string[];
+        const deleted = await queue.purgeTasks(taskIds);
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              deletedCount: deleted,
+              message: `Purged ${deleted} task(s)`
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : String(error)
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+    }
+  });
 }

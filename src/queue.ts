@@ -368,6 +368,18 @@ export class TaskQueue {
     return result.changes;
   }
 
+  async purgeTasks(taskIds: string[]): Promise<number> {
+    if (!taskIds.length) return 0;
+    
+    const placeholders = taskIds.map(() => "?").join(",");
+    const stmt = this.db.prepare(`
+      DELETE FROM tasks WHERE id IN (${placeholders})
+    `);
+
+    const result = stmt.run(...taskIds);
+    return result.changes;
+  }
+
   close(): void {
     this.db.close();
   }

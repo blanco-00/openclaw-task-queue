@@ -303,6 +303,19 @@ Clean up old archived tasks.
 Parameters:
 - `olderThanDays`: Remove archived tasks older than this many days (default: 7)
 
+### task_purge
+
+Permanently delete specific tasks by ID.
+
+```json
+{
+  "taskIds": ["task-1710123456-abc123", "task-1710123457-def456"]
+}
+```
+
+Parameters:
+- `taskIds` (required): Array of task IDs to delete
+
 ## Task Lifecycle
 
 ```
