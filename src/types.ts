@@ -43,6 +43,11 @@ export interface TaskRecord {
   result: string | null; // JSON string
   error: string | null;
   
+  // Decomposition fields
+  depends_on: string | null;  // JSON array of task IDs
+  order_index: number;
+  archived_at: string | null;
+  
   source_channel: string | null;
   source_conversation: string | null;
   source_message: string | null;
@@ -51,9 +56,10 @@ export interface TaskRecord {
 /**
  * Task with parsed payload
  */
-export interface Task extends Omit<TaskRecord, 'payload' | 'result'> {
+export interface Task extends Omit<TaskRecord, 'payload' | 'result' | 'depends_on'> {
   payload: Record<string, unknown>;
   result?: Record<string, unknown>;
+  dependsOn?: string[];
 }
 
 /**
@@ -66,6 +72,8 @@ export interface CreateTaskOptions {
   maxRetries?: number;
   timeoutSeconds?: number;
   scheduledAt?: Date;
+  dependsOn?: string[];
+  orderIndex?: number;
   source?: {
     channel: string;
     conversation: string;

@@ -72,6 +72,10 @@ export class TaskQueue {
         result TEXT,
         error TEXT,
         
+        depends_on TEXT,
+        order_index INTEGER DEFAULT 0,
+        archived_at DATETIME,
+        
         source_channel TEXT,
         source_conversation TEXT,
         source_message TEXT
@@ -96,9 +100,10 @@ export class TaskQueue {
     const stmt = this.db.prepare(`
       INSERT INTO tasks (
         id, type, payload, priority, max_retries, timeout_seconds,
-        scheduled_at, source_channel, source_conversation, source_message
+        scheduled_at, depends_on, order_index,
+        source_channel, source_conversation, source_message
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -109,6 +114,8 @@ export class TaskQueue {
       options.maxRetries ?? this.config.maxRetries,
       options.timeoutSeconds ?? this.config.timeoutSeconds,
       options.scheduledAt?.toISOString() ?? null,
+      options.dependsOn ? JSON.stringify(options.dependsOn) : null,
+      options.orderIndex ?? 0,
       options.source?.channel ?? null,
       options.source?.conversation ?? null,
       options.source?.message ?? null
@@ -118,30 +125,48 @@ export class TaskQueue {
   }
 
   async claimTask(workerId: string): Promise<Task | null> {
-    const claimStmt = this.db.prepare(`
-      UPDATE tasks
-      SET status = 'RUNNING',
-          claimed_at = CURRENT_TIMESTAMP,
-          claimed_by = ?,
-          started_at = CURRENT_TIMESTAMP
-      WHERE id = (
-        SELECT id FROM tasks
-        WHERE status = 'PENDING'
+    // First, find a task whose dependencies are met
+    const pendingTasks = this.db.prepare(`
+      SELECT id, depends_on FROM tasks
+      WHERE status = 'PENDING'
+        AND (scheduled_at IS NULL OR scheduled_at <= CURRENT_TIMESTAMP)
+      ORDER BY priority DESC, order_index ASC, created_at ASC
+    `).all() as Array<{ id: string; depends_on: string | null }>;
+
+    for (const task of pendingTasks) {
+      if (task.depends_on) {
+        const deps = JSON.parse(task.depends_on) as string[];
+        let allDone = true;
+        for (const depId of deps) {
+          const depTask = this.db.prepare(`SELECT status FROM tasks WHERE id = ?`).get(depId) as { status: string } | undefined;
+          if (!depTask || depTask.status !== 'COMPLETED') {
+            allDone = false;
+            break;
+          }
+        }
+        if (!allDone) continue;
+      }
+
+      // Try to atomically claim this task
+      const claimStmt = this.db.prepare(`
+        UPDATE tasks
+        SET status = 'RUNNING',
+            claimed_at = CURRENT_TIMESTAMP,
+            claimed_by = ?,
+            started_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND status = 'PENDING'
           AND (scheduled_at IS NULL OR scheduled_at <= CURRENT_TIMESTAMP)
-        ORDER BY priority DESC, created_at ASC
-        LIMIT 1
-      )
-      AND status = 'PENDING'
-      RETURNING *
-    `);
+        RETURNING *
+      `);
 
-    const result = claimStmt.get(workerId) as TaskRecord | undefined;
-
-    if (!result) {
-      return null;
+      const result = claimStmt.get(workerId, task.id) as TaskRecord | undefined;
+      if (result) {
+        return this.parseTask(result);
+      }
     }
 
-    return this.parseTask(result);
+    return null;
   }
 
   async completeTask(taskId: string, result?: Record<string, unknown>): Promise<void> {
@@ -272,6 +297,57 @@ export class TaskQueue {
     return counts;
   }
 
+  async checkDependenciesMet(taskId: string): Promise<boolean> {
+    const task = await this.getTask(taskId);
+    if (!task || !task.dependsOn || task.dependsOn.length === 0) {
+      return true;
+    }
+
+    for (const depId of task.dependsOn) {
+      const depTask = await this.getTask(depId);
+      if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async getPendingDependencies(taskId: string): Promise<string[]> {
+    const task = await this.getTask(taskId);
+    if (!task || !task.dependsOn || task.dependsOn.length === 0) {
+      return [];
+    }
+
+    const pending: string[] = [];
+    for (const depId of task.dependsOn) {
+      const depTask = await this.getTask(depId);
+      if (!depTask || depTask.status !== TaskStatus.COMPLETED) {
+        pending.push(depId);
+      }
+    }
+    return pending;
+  }
+
+  async archiveTask(taskId: string): Promise<void> {
+    const stmt = this.db.prepare(`
+      UPDATE tasks
+      SET archived_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `);
+    stmt.run(taskId);
+  }
+
+  async listArchivedTasks(olderThanDays: number = 7): Promise<Task[]> {
+    const stmt = this.db.prepare(`
+      SELECT * FROM tasks
+      WHERE archived_at IS NOT NULL
+        AND archived_at < datetime('now', '-' || ? || ' days')
+      ORDER BY archived_at ASC
+    `);
+    const results = stmt.all(olderThanDays) as TaskRecord[];
+    return results.map((r) => this.parseTask(r));
+  }
+
   async cleanupOldTasks(olderThanDays: number = 30): Promise<number> {
     const stmt = this.db.prepare(`
       DELETE FROM tasks
@@ -292,6 +368,7 @@ export class TaskQueue {
       ...record,
       payload: JSON.parse(record.payload),
       result: record.result ? JSON.parse(record.result) : undefined,
+      dependsOn: record.depends_on ? JSON.parse(record.depends_on) : undefined,
     } as Task;
   }
 }

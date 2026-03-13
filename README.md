@@ -221,6 +221,88 @@ Returns:
 }
 ```
 
+### task_decompose
+
+Decompose a complex task into atomic subtasks with dependencies.
+
+```json
+{
+  "subtasks": [
+    {
+      "id": "step-1",
+      "type": "analyze",
+      "payload": { "target": "dataset" },
+      "orderIndex": 0
+    },
+    {
+      "id": "step-2",
+      "type": "process",
+      "payload": { "input": "step-1-result" },
+      "dependsOn": ["step-1"],
+      "blocking": "interactive",
+      "orderIndex": 1
+    },
+    {
+      "id": "step-3",
+      "type": "report",
+      "payload": { "data": "step-2-result" },
+      "dependsOn": ["step-2"],
+      "blocking": "background",
+      "orderIndex": 2
+    }
+  ]
+}
+```
+
+Parameters:
+- `subtasks` (required): Array of subtask definitions
+  - `id`: Temporary ID for referencing (e.g., "step-1")
+  - `type`: Task type identifier
+  - `payload`: Task data
+  - `blocking`: "background" (default) | "interactive"
+  - `dependsOn`: Array of subtask IDs this depends on
+  - `orderIndex`: Execution order (lower = earlier)
+- `askUser`: Set to true if cannot decompose - will prompt user
+
+Returns:
+```json
+{
+  "success": true,
+  "createdSubtasks": 3,
+  "tasks": [
+    { "tempId": "step-1", "taskId": "task-xxx", "blocking": false },
+    { "tempId": "step-2", "taskId": "task-yyy", "blocking": true },
+    { "tempId": "step-3", "taskId": "task-zzz", "blocking": false }
+  ],
+  "paused": true,
+  "message": "Created 3 subtasks. Workflow paused at interactive subtask(s).",
+  "nextAction": "Wait for user confirmation before continuing."
+}
+```
+
+### task_archive
+
+Archive a completed task.
+
+```json
+{
+  "taskId": "task-1710123456-abc123"
+}
+```
+
+### task_cleanup
+
+Clean up old archived tasks.
+
+```json
+{
+  "olderThanDays": 7
+}
+```
+
+Parameters:
+- `olderThanDays`: Remove archived tasks older than this many days (default: 7)
+
 ## Task Lifecycle
 
 ```
@@ -337,6 +419,42 @@ RETURNING *;
 1. 找到最高优先级的待处理任务
 2. 仅在仍为 PENDING 时领取 (防止竞态)
 3. 返回被领取的任务
+
+### Database Schema
+
+```sql
+CREATE TABLE tasks (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  priority INTEGER DEFAULT 0,
+  
+  status TEXT DEFAULT 'PENDING',
+  retry_count INTEGER DEFAULT 0,
+  max_retries INTEGER DEFAULT 3,
+  
+  claimed_at DATETIME,
+  claimed_by TEXT,
+  timeout_seconds INTEGER DEFAULT 300,
+  
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  started_at DATETIME,
+  completed_at DATETIME,
+  scheduled_at DATETIME,
+  
+  result TEXT,
+  error TEXT,
+  
+  -- Task decomposition fields
+  depends_on TEXT,        -- JSON array: ["task-1", "task-2"]
+  order_index INTEGER,    -- execution order
+  archived_at DATETIME,   -- archival timestamp
+  
+  source_channel TEXT,
+  source_conversation TEXT,
+  source_message TEXT
+);
+```
 
 ## Comparison
 
