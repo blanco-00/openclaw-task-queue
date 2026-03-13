@@ -34,11 +34,12 @@ npm install @openclaw-task-queue/core better-sqlite3
 
 ## Workflow
 
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│    User     │───▶│ AI Decompose│───▶│  Scheduled │───▶│   Execute   │───▶│   Feedback  │
-│  Submits   │    │   Tasks     │    │   Claim    │    │   Task      │    │   to User   │
-└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```mermaid
+flowchart LR
+    A[User Submits] --> B[AI Decompose]
+    B --> C[Scheduled Claim]
+    C --> D[Execute Task]
+    D --> E[Feedback to User]
 ```
 
 ## Quick Start
@@ -338,20 +339,18 @@ Returns number of repaired tasks.
 
 ## Task Lifecycle
 
-```
-PENDING → claim() → RUNNING → complete() → COMPLETED
-                    │
-              fail(retryable=true) │ timeout()
-                    │
-                    ▼
-            FAILED(retryable) → retry() → PENDING
-                    │
-         fail(retryable=false) / max_retry
-                    │
-                    ▼
-                   DEAD
-
-PENDING → cancel() → FAILED (not retryable)
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> RUNNING: claim()
+    RUNNING --> COMPLETED: complete()
+    RUNNING --> FAILED: fail(retryable=true) / timeout()
+    FAILED --> PENDING: retry()
+    FAILED --> DEAD: max_retry
+    PENDING --> FAILED: cancel()
+    DEAD --> [*]
+    COMPLETED --> [*]
+    PENDING --> [*]
 ```
 
 ## Configuration

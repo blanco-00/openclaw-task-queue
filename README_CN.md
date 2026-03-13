@@ -34,8 +34,12 @@ npm install @openclaw-task-queue/core better-sqlite3
 
 ## 工作流
 
-```
-用户提交 → AI拆分 → 定时领取 → 执行 → 反馈
+```mermaid
+flowchart LR
+    A[用户提交] --> B[AI拆分]
+    B --> C[定时领取]
+    C --> D[执行任务]
+    D --> E[反馈给用户]
 ```
 
 ## 快速开始
@@ -335,19 +339,18 @@ console.log(`Created task: ${taskId}`);
 
 ## 任务生命周期
 
-```
-PENDING → claim() → RUNNING → complete() → COMPLETED
-                    │
-              fail(retryable=true) │ timeout()
-                    │
-                    ▼
-            FAILED(可重试) → retry() → PENDING
-                    │
-         fail(retryable=false) / 超过最大重试
-                    ▼
-                   DEAD
-
-PENDING → cancel() → FAILED (不可重试)
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> RUNNING: claim()
+    RUNNING --> COMPLETED: complete()
+    RUNNING --> FAILED: fail(retryable=true) / timeout()
+    FAILED --> PENDING: retry()
+    FAILED --> DEAD: 超过最大重试
+    PENDING --> FAILED: cancel()
+    DEAD --> [*]
+    COMPLETED --> [*]
+    PENDING --> [*]
 ```
 
 ## 配置
