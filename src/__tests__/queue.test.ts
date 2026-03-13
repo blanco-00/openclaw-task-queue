@@ -95,6 +95,26 @@ describe("TaskQueue", () => {
       expect(claimed).not.toBeNull();
       expect(claimed!.id).toBe(id);
     });
+
+    it("creates task with dependsOn and orderIndex", async () => {
+      const depId = await queue.createTask({
+        type: "dep-task",
+        payload: createMockPayload(),
+      });
+      await queue.claimTask("worker-1");
+      await queue.completeTask(depId, { result: "done" });
+
+      const id = await queue.createTask({
+        type: "child-task",
+        payload: createMockPayload(),
+        dependsOn: [depId],
+        orderIndex: 5,
+      });
+
+      const task = await queue.getTask(id);
+      expect(task!.dependsOn).toContain(depId);
+      expect(task!.order_index).toBe(5);
+    });
   });
 
   describe("completeTask", () => {
@@ -163,6 +183,37 @@ describe("TaskQueue", () => {
       const task = await queue.getTask(id);
       expect(task!.status).toBe(TaskStatus.DEAD);
       expect(task!.retry_count).toBe(2);
+    });
+
+    it("sets FAILED status when retryable=false", async () => {
+      const id = await queue.createTask({
+        type: "test-task",
+        payload: createMockPayload(),
+        maxRetries: 3,
+      });
+
+      await queue.claimTask("worker-1");
+      await queue.failTask(id, "Cancelled by user", false);
+
+      const task = await queue.getTask(id);
+      expect(task!.status).toBe(TaskStatus.FAILED);
+      expect(task!.error).toBe("Cancelled by user");
+      expect(task!.retry_count).toBe(0);
+    });
+
+    it("resets to PENDING when retryable=true (default)", async () => {
+      const id = await queue.createTask({
+        type: "test-task",
+        payload: createMockPayload(),
+        maxRetries: 3,
+      });
+
+      await queue.claimTask("worker-1");
+      await queue.failTask(id, "Temporary error", true);
+
+      const task = await queue.getTask(id);
+      expect(task!.status).toBe(TaskStatus.PENDING);
+      expect(task!.retry_count).toBe(1);
     });
   });
 
@@ -335,6 +386,52 @@ describe("TaskQueue", () => {
 
       const thirdClaimed = await queue.claimTask("worker-1");
       expect(thirdClaimed!.id).toBe(thirdId);
+    });
+
+    it("respects dependsOn - only claims when dependency is COMPLETED", async () => {
+      const depId = await queue.createTask({
+        type: "dep-task",
+        payload: createMockPayload(),
+      });
+
+      const childId = await queue.createTask({
+        type: "child-task",
+        payload: createMockPayload(),
+        dependsOn: [depId],
+      });
+
+      const claimed = await queue.claimTask("worker-1");
+      expect(claimed).not.toBeNull();
+      expect(claimed!.id).toBe(depId);
+
+      await queue.completeTask(depId, { result: "done" });
+
+      const claimedChild = await queue.claimTask("worker-2");
+      expect(claimedChild).not.toBeNull();
+      expect(claimedChild!.id).toBe(childId);
+    });
+
+    it("skips task with incomplete dependencies", async () => {
+      const depId = await queue.createTask({
+        type: "dep-task",
+        payload: createMockPayload(),
+      });
+
+      const childId = await queue.createTask({
+        type: "child-task",
+        payload: createMockPayload(),
+        dependsOn: [depId],
+      });
+
+      const claimed = await queue.claimTask("worker-1");
+      expect(claimed).not.toBeNull();
+      expect(claimed!.id).toBe(depId);
+
+      await queue.completeTask(depId, { result: "done" });
+
+      const claimedChild = await queue.claimTask("worker-1");
+      expect(claimedChild).not.toBeNull();
+      expect(claimedChild!.id).toBe(childId);
     });
   });
 

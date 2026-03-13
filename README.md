@@ -326,6 +326,16 @@ Find stuck tasks that need cleanup (PENDING with error messages).
 
 Returns tasks with errors like "Cancelled by user" or timeout.
 
+### task_repair
+
+Repair historical cancelled tasks. Fixes tasks that were cancelled before the bug fix - changes PENDING tasks with "Cancelled" error to FAILED status.
+
+```json
+{}
+```
+
+Returns number of repaired tasks.
+
 ## Task Lifecycle
 
 ```

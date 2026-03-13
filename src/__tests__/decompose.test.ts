@@ -191,4 +191,36 @@ describe("Task Decomposition & Blocking", () => {
       expect(result.deletedCount).toBeGreaterThanOrEqual(0);
     });
   });
+
+  describe("task_find_stuck", () => {
+    it("finds PENDING tasks with error messages", async () => {
+      const taskId = await queue.createTask({ type: "task-1", payload: {} });
+      await queue.claimTask("worker-1");
+      await queue.failTask(taskId, "Cancelled by user", true);
+
+      const task = await queue.getTask(taskId);
+      expect(task?.status).toBe("PENDING");
+      expect(task?.error).toContain("Cancelled");
+
+      const response = await callTool(mockApi, "task_find_stuck", {});
+      const result = parseToolResponse<{ success: boolean; count: number }>(response);
+
+      expect(result.success).toBe(true);
+      expect(result.count).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe("task_repair", () => {
+    it("repairs cancelled PENDING tasks to FAILED", async () => {
+      const taskId = await queue.createTask({ type: "task-1", payload: {} });
+      await queue.claimTask("worker-1");
+      await queue.failTask(taskId, "Cancelled by user", false);
+
+      const response = await callTool(mockApi, "task_repair", {});
+      const result = parseToolResponse<{ success: boolean; repairedCount: number }>(response);
+
+      expect(result.success).toBe(true);
+      expect(result.repairedCount).toBeGreaterThanOrEqual(0);
+    });
+  });
 });
