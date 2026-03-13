@@ -316,6 +316,16 @@ Permanently delete specific tasks by ID.
 Parameters:
 - `taskIds` (required): Array of task IDs to delete
 
+### task_find_stuck
+
+Find stuck tasks that need cleanup (PENDING with error messages).
+
+```json
+{}
+```
+
+Returns tasks with errors like "Cancelled by user" or timeout.
+
 ## Task Lifecycle
 
 ```

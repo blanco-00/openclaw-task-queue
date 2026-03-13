@@ -380,6 +380,16 @@ export class TaskQueue {
     return result.changes;
   }
 
+  async findStuckTasks(): Promise<Array<{ id: string; status: string; error: string | null; created_at: string }>> {
+    const stmt = this.db.prepare(`
+      SELECT id, status, error, created_at FROM tasks
+      WHERE status = 'PENDING' AND error IS NOT NULL
+        AND (error LIKE '%Cancelled%' OR error LIKE '%timeout%')
+      ORDER BY created_at ASC
+    `);
+    return stmt.all() as Array<{ id: string; status: string; error: string | null; created_at: string }>;
+  }
+
   close(): void {
     this.db.close();
   }

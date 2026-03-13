@@ -634,4 +634,48 @@ WARNING: This is a hard delete - task will be permanently removed.`,
       }
     }
   });
+
+  api.registerTool({
+    name: "task_find_stuck",
+    description: `Find stuck tasks that need cleanup.
+
+Returns tasks that are PENDING but have error messages (e.g., cancelled, timeout).
+Use this to identify tasks that can be purged.`,
+    parameters: {
+      type: "object",
+      properties: {}
+    },
+    async execute(_id: string, _params: ToolParams): Promise<ToolResult> {
+      try {
+        const stuckTasks = await queue.findStuckTasks();
+
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: true,
+              count: stuckTasks.length,
+              tasks: stuckTasks.map(t => ({
+                id: t.id,
+                status: t.status,
+                error: t.error,
+                createdAt: t.created_at
+              }))
+            }, null, 2)
+          }]
+        };
+      } catch (error) {
+        return {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              success: false,
+              error: error instanceof Error ? error.message : String(error)
+            }, null, 2)
+          }],
+          isError: true
+        };
+      }
+    }
+  });
 }
