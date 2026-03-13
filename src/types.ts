@@ -136,11 +136,20 @@ export interface PluginApi {
   registerTool(tool: {
     name: string;
     description: string;
-    inputSchema: Record<string, unknown>;
-    handler: (params: Record<string, unknown>) => Promise<{
+    parameters: Record<string, unknown>;
+    execute: (id: string, params: Record<string, unknown>) => Promise<{
       content: Array<{ type: string; text: string }>;
+      isError?: boolean;
     }>;
   }): void;
+  registerTool(tool: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    execute: (id: string, params: Record<string, unknown>) => Promise<{
+      content: Array<{ type: string; text: string }>;
+    }>;
+  }, options?: { optional?: boolean }): void;
   registerService(service: {
     id: string;
     start: () => Promise<void>;

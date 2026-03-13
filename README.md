@@ -2,15 +2,21 @@
 
 SQLite-based task queue with atomic operations for AI agents.
 
+## 核心价值 | Core Value
+
+**一句话概括**: 让 AI 自己管理任务队列，实现「用户提交任务 → AI 自动拆分 → 定时领取 → 执行 → 反馈」的完全自动化。
+
 ## Features
 
-- **SQLite + WAL mode** - Single-file database with better concurrency
-- **Atomic task claiming** - Compare-And-Swap (CAS) prevents duplicate processing
-- **Automatic timeout recovery** - Stalled tasks are automatically reclaimed
-- **Retry with backoff** - Configurable retry attempts for failed tasks
-- **Priority queues** - Tasks processed by priority then creation time
-- **Scheduled tasks** - Delay task execution until a specific time
-- **Task tracking** - Full visibility into task status and history
+- **AI 自驱闭环** - 定时自动领取任务执行，无需人工干预
+- **SQLite + WAL 模式** - 单文件数据库，高并发支持
+- **原子任务领取** - CAS 防止重复处理
+- **自动超时恢复** - 卡住的任务自动回收
+- **重试机制** - 失败任务自动重试
+- **优先级队列** - 按优先级和创建时间处理
+- **定时任务** - 支持延迟到指定时间执行
+- **任务追踪** - 完整的状态和历史记录
+- **内置 Cron** - 自动定时处理任务队列
 
 ## Installation
 
@@ -26,22 +32,99 @@ openclaw plugins install @openclaw-task-queue/core
 npm install @openclaw-task-queue/core better-sqlite3
 ```
 
+## 工作流 | Workflow
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  用户提交    │───▶│   AI 拆分   │───▶│  定时领取   │───▶│   执行任务  │───▶│   反馈结果  │
+│  任务需求   │    │  任务队列   │    │  任务队列   │    │  后台处理   │    │   给用户   │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+```
+
 ## Quick Start
 
 ### OpenClaw Plugin Usage
 
-After installation, the following tools are automatically available to your agent:
+After installation, the following tools are automatically available:
 
 ```
-User: 帮我分析这个大型数据集，但不用马上完成，后台处理就行
+User: 帮我分析这个大型数据集
 
-Agent: 我来创建一个后台任务来处理这个分析。
-[Uses task_create tool]
+Agent: [Uses task_create]
+✅ 已创建任务 task-xxx
+```
 
-✅ 已创建任务 task-1710123456-abc123
-任务将在后台执行，预计需要 5-10 分钟。
+### Demo | 演示
 
-你可以随时用 task_status 查询进度。
+#### 1. 创建任务
+
+```
+User: 创建一个简单的测试任务
+
+Agent: [调用 task_create]
+✅ 已创建简单测试任务 
+
+| 项目 | 详情 |
+|------|------|
+| 任务ID | task-xxx |
+| 类型 | test |
+| 优先级 | low |
+| 状态 | ⏳ PENDING |
+```
+
+#### 2. 获取统计
+
+```
+User: 获取任务统计
+
+Agent: [调用 task_stats]
+任务统计结果：
+
+| 状态 | 数量 |
+|------|------|
+| ⏳ PENDING | 3 |
+| 🔄 RUNNING | 0 |
+| ✅ COMPLETED | 0 |
+| ❌ FAILED | 0 |
+```
+
+#### 3. 列出任务
+
+```
+User: 列出所有待处理任务
+
+Agent: [调用 task_list]
+待处理任务列表：
+
+| 序号 | 任务ID | 类型 | 优先级 |
+|------|--------|------|--------|
+| 1 | task-xxx | test | 5 |
+| 2 | task-yyy | analysis | 10 |
+```
+
+#### 4. 查看状态
+
+```
+User: 查看任务 xxx 的状态
+
+Agent: [调用 task_status]
+任务状态:
+
+| 项目 | 详情 |
+|------|------|
+| 任务ID | task-xxx |
+| 状态 | ⏳ PENDING |
+| 优先级 | 5 |
+| 创建时间 | 2026-03-13 12:00:00 |
+```
+
+#### 5. 取消任务
+
+```
+User: 取消任务 task-xxx
+
+Agent: [调用 task_cancel]
+已成功取消任务 task-xxx ✅
 ```
 
 ### Standalone Usage
@@ -49,14 +132,12 @@ Agent: 我来创建一个后台任务来处理这个分析。
 ```typescript
 import { TaskQueue, TaskWorker } from "@openclaw-task-queue/core";
 
-// Create queue
 const queue = new TaskQueue({
   dbPath: "./tasks.db",
   maxRetries: 3,
   timeoutSeconds: 300,
 });
 
-// Create task
 const taskId = await queue.createTask({
   type: "data-analysis",
   payload: { dataset: "sales_2024.csv" },
@@ -64,21 +145,6 @@ const taskId = await queue.createTask({
 });
 
 console.log(`Created task: ${taskId}`);
-
-// Start worker with processor
-const worker = new TaskWorker(queue, {
-  concurrency: 2,
-  processor: async (task) => {
-    console.log(`Processing ${task.id}...`);
-    
-    // Your processing logic here
-    const result = await processData(task.payload);
-    
-    return result;
-  }
-});
-
-await worker.start();
 ```
 
 ## Tools
@@ -94,8 +160,7 @@ Create a new background task.
     "template": "monthly",
     "month": "2024-03"
   },
-  "priority": "high",
-  "scheduledAt": "2024-04-01T09:00:00Z"
+  "priority": "high"
 }
 ```
 
@@ -104,30 +169,14 @@ Parameters:
 - `payload` (required): Task data
 - `priority`: "high" | "medium" | "low" (default: "medium")
 - `scheduledAt`: ISO datetime for delayed execution
-- `maxRetries`: Override default retry count
-- `timeoutSeconds`: Override default timeout
 
 ### task_status
 
-Check task status and progress.
+Check task status.
 
 ```json
 {
   "taskId": "task-1710123456-abc123"
-}
-```
-
-Returns:
-```json
-{
-  "success": true,
-  "id": "task-1710123456-abc123",
-  "status": "RUNNING",
-  "retryCount": 0,
-  "createdAt": "2024-03-11T10:30:00Z",
-  "startedAt": "2024-03-11T10:30:05Z",
-  "completedAt": null,
-  "error": null
 }
 ```
 
@@ -157,46 +206,39 @@ Cancel a pending task.
 
 Get queue statistics.
 
+```json
+{}
+```
+
 Returns:
 ```json
 {
-  "success": true,
-  "counts": {
-    "PENDING": 15,
-    "RUNNING": 2,
-    "COMPLETED": 234,
-    "FAILED": 3,
-    "DEAD": 1
-  }
+  "PENDING": 15,
+  "RUNNING": 2,
+  "COMPLETED": 234,
+  "FAILED": 3,
+  "DEAD": 1
 }
 ```
 
 ## Task Lifecycle
 
 ```
-┌─────────┐    claim()    ┌─────────┐    complete()    ┌──────────┐
-│ PENDING │──────────────▶│ RUNNING │────────────────▶│ COMPLETED│
-└─────────┘               └────┬────┘                 └──────────┘
-                               │
-                          fail() │ timeout()
-                               │
-                               ▼
-                          ┌─────────┐    retry()    ┌─────────┐
-                          │ FAILED  │──────────────▶│ PENDING │
-                          └─────────┘               └─────────┘
-                               │
-                    max_retry  │
-                               ▼
-                          ┌─────────┐
-                          │  DEAD   │
-                          └─────────┘
+PENDING → claim() → RUNNING → complete() → COMPLETED
+                    │
+                fail() │ timeout()
+                    │
+                    ▼
+                 FAILED → retry() → PENDING
+                    │
+              max_retry
+                    ▼
+                   DEAD
 ```
 
 ## Configuration
 
 ### OpenClaw Plugin
-
-Add to `~/.openclaw/openclaw.json`:
 
 ```json
 {
@@ -210,7 +252,9 @@ Add to `~/.openclaw/openclaw.json`:
           "pollIntervalMs": 5000,
           "maxRetries": 3,
           "timeoutSeconds": 300,
-          "enableWorker": true
+          "enableWorker": true,
+          "cronEnabled": true,
+          "cronIntervalMs": 60000
         }
       }
     }
@@ -218,37 +262,61 @@ Add to `~/.openclaw/openclaw.json`:
 }
 ```
 
-### Standalone
+### Configuration Options
 
-```typescript
-const queue = new TaskQueue({
-  dbPath: "./tasks.db",        // SQLite database path
-  maxRetries: 3,               // Max retry attempts
-  timeoutSeconds: 300,         // Task timeout (5 min)
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| dbPath | string | ~/.openclaw/task-queue.db | Database path |
+| concurrency | number | 1 | Max concurrent tasks |
+| pollIntervalMs | number | 5000 | Worker poll interval |
+| maxRetries | number | 3 | Max retry attempts |
+| timeoutSeconds | number | 300 | Task timeout |
+| enableWorker | boolean | true | Enable worker |
+| cronEnabled | boolean | true | Enable built-in cron |
+| cronIntervalMs | number | 60000 | Cron interval |
+
+## 长运行 Agent | Long-Running Agent
+
+### 核心思路
+
+利用任务队列 + 内置 Cron，构建自主工作的 AI Agent:
+
+1. **任务入口**: 用户通过对话提交任务
+2. **任务拆分**: AI 自动拆分为可执行的子任务
+3. **定时领取**: Cron 自动检查并领取任务
+4. **执行反馈**: 执行完成后更新状态并通知用户
+
+### 配置示例
+
+```javascript
+// 用户提交: "帮我重构这个项目"
+
+// 1. AI 使用 task_create 创建任务
+await taskCreate({
+  type: "code-refactor",
+  payload: { target: "整个项目" }
 });
 
-const worker = new TaskWorker(queue, {
-  concurrency: 2,              // Parallel tasks
-  pollIntervalMs: 5000,        // Poll every 5s
-  processor: async (task) => { // Task processor
-    // Process task
-    return result;
-  }
-});
+// 2. AI 拆分为子任务
+await taskCreate({ type: "analyze", payload: {...} });
+await taskCreate({ type: "refactor-module-a", payload: {...} });
+await taskCreate({ type: "refactor-module-b", payload: {...} });
+await taskCreate({ type: "test", payload: {...} });
+
+// 3. 内置 Cron 自动领取并执行
+// cronIntervalMs = 60000 (每分钟检查一次)
 ```
 
 ## Architecture
 
-### Why SQLite?
+### 为什么用 SQLite?
 
-- **No external dependencies** - No Redis, PostgreSQL, etc.
-- **Single file** - Easy backup, migration, and debugging
-- **WAL mode** - Better concurrent read/write performance
-- **Atomic operations** - Compare-And-Swap prevents race conditions
+- **无外部依赖** - 不需要 Redis、PostgreSQL 等
+- **单文件** - 易于备份、迁移和调试
+- **WAL 模式** - 更好的并发读写性能
+- **原子操作** - CAS 防止竞态条件
 
 ### Atomic Task Claiming
-
-The key to preventing duplicate task processing is the Compare-And-Swap (CAS) pattern:
 
 ```sql
 UPDATE tasks
@@ -265,10 +333,10 @@ AND status = 'PENDING'  -- CAS check!
 RETURNING *;
 ```
 
-This single statement atomically:
-1. Finds the highest priority pending task
-2. Claims it only if still pending (prevents race)
-3. Returns the claimed task
+这个语句原子地:
+1. 找到最高优先级的待处理任务
+2. 仅在仍为 PENDING 时领取 (防止竞态)
+3. 返回被领取的任务
 
 ## Comparison
 
@@ -280,20 +348,14 @@ This single statement atomically:
 | Atomic ops | ✅ | ❌ | ✅ |
 | Query tasks | ✅ | ❌ | ⚠️ |
 | OpenClaw native | ✅ | ⚠️ | ❌ |
+| Built-in Cron | ✅ | ❌ | ❌ |
 
 ## Development
 
 ```bash
-# Install dependencies
 npm install
-
-# Build
 npm run build
-
-# Run tests
 npm test
-
-# Watch mode
 npm run test:watch
 ```
 

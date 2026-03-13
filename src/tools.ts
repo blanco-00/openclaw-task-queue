@@ -16,7 +16,7 @@ Use this when:
 - You want to track progress of a long-running operation
 
 The task will be queued and processed by a background worker. You can check its status using task_status.`,
-    inputSchema: {
+    parameters: {
       type: "object",
       properties: {
         type: {
@@ -38,17 +38,17 @@ The task will be queued and processed by a background worker. You can check its 
           description: "ISO 8601 datetime for scheduled execution (optional)"
         },
         maxRetries: {
-          type: "integer",
+          type: "number",
           description: "Maximum retry attempts (default: 3)"
         },
         timeoutSeconds: {
-          type: "integer",
+          type: "number",
           description: "Task timeout in seconds (default: 300)"
         }
       },
       required: ["type", "payload"]
     },
-    handler: async (params: ToolParams): Promise<ToolResult> => {
+    async execute(_id: string, params: ToolParams): Promise<ToolResult> {
       try {
         const priorityMap: Record<string, number> = {
           high: TaskPriority.HIGH,
@@ -99,7 +99,7 @@ Returns:
 - retryCount: Number of retry attempts
 - error: Error message if failed
 - result: Task result if completed`,
-    inputSchema: {
+    parameters: {
       type: "object",
       properties: {
         taskId: {
@@ -109,7 +109,7 @@ Returns:
       },
       required: ["taskId"]
     },
-    handler: async (params: ToolParams): Promise<ToolResult> => {
+    async execute(_id: string, params: ToolParams): Promise<ToolResult> {
       try {
         const status = await queue.getTaskStatus(params.taskId as string);
 
@@ -155,7 +155,7 @@ Returns:
     description: `List tasks in the queue with optional filters.
 
 Use this to see pending, running, completed, or failed tasks.`,
-    inputSchema: {
+    parameters: {
       type: "object",
       properties: {
         status: {
@@ -169,13 +169,13 @@ Use this to see pending, running, completed, or failed tasks.`,
           description: "Filter by task type"
         },
         limit: {
-          type: "integer",
+          type: "number",
           default: 20,
           description: "Maximum number of tasks to return"
         }
       }
     },
-    handler: async (params: ToolParams): Promise<ToolResult> => {
+    async execute(_id: string, params: ToolParams): Promise<ToolResult> {
       try {
         const tasks = await queue.listTasks({
           status: params.status === "all" ? undefined : params.status as string,
@@ -223,7 +223,7 @@ Use this to see pending, running, completed, or failed tasks.`,
     description: `Cancel a pending task.
 
 Note: Only PENDING tasks can be cancelled. Running tasks cannot be cancelled.`,
-    inputSchema: {
+    parameters: {
       type: "object",
       properties: {
         taskId: {
@@ -233,7 +233,7 @@ Note: Only PENDING tasks can be cancelled. Running tasks cannot be cancelled.`,
       },
       required: ["taskId"]
     },
-    handler: async (params: ToolParams): Promise<ToolResult> => {
+    async execute(_id: string, params: ToolParams): Promise<ToolResult> {
       try {
         const task = await queue.getTask(params.taskId as string);
 
@@ -294,11 +294,11 @@ Note: Only PENDING tasks can be cancelled. Running tasks cannot be cancelled.`,
     description: `Get task queue statistics.
 
 Returns counts of tasks by status (PENDING, RUNNING, COMPLETED, FAILED, DEAD).`,
-    inputSchema: {
+    parameters: {
       type: "object",
       properties: {}
     },
-    handler: async (): Promise<ToolResult> => {
+    async execute(_id: string, params: ToolParams): Promise<ToolResult> {
       try {
         const counts = await queue.getTaskCounts();
 

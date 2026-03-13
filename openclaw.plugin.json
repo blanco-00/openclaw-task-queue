@@ -40,6 +40,17 @@
         "type": "boolean",
         "default": true,
         "description": "Enable automatic task worker"
+      },
+      "cronEnabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable built-in cron service for automatic task processing"
+      },
+      "cronIntervalMs": {
+        "type": "integer",
+        "default": 60000,
+        "minimum": 5000,
+        "description": "Cron service polling interval in milliseconds"
       }
     }
   },
@@ -49,6 +60,8 @@
     "pollIntervalMs": { "label": "Poll Interval (ms)", "placeholder": "5000" },
     "maxRetries": { "label": "Max Retries", "placeholder": "3" },
     "timeoutSeconds": { "label": "Timeout (seconds)", "placeholder": "300" },
-    "enableWorker": { "label": "Enable Worker" }
+    "enableWorker": { "label": "Enable Worker" },
+    "cronEnabled": { "label": "Enable Cron" },
+    "cronIntervalMs": { "label": "Cron Interval (ms)", "placeholder": "60000" }
   }
 }

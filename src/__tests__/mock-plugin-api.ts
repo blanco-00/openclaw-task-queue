@@ -1,6 +1,6 @@
 import { PluginApi } from "../types";
 
-type ToolHandler = (params: Record<string, unknown>) => Promise<{
+type ToolExecutor = (id: string, params: Record<string, unknown>) => Promise<{
   content: Array<{ type: string; text: string }>;
   isError?: boolean;
 }>;
@@ -12,10 +12,10 @@ type MockService = {
 };
 
 export function createMockPluginApi(): PluginApi & {
-  getRegisteredTools: () => Map<string, { handler: ToolHandler; description: string }>;
+  getRegisteredTools: () => Map<string, { executor: ToolExecutor; description: string }>;
   getRegisteredServices: () => MockService[];
 } {
-  const tools = new Map<string, { handler: ToolHandler; description: string }>();
+  const tools = new Map<string, { executor: ToolExecutor; description: string }>();
   const services: MockService[] = [];
 
   return {
@@ -40,10 +40,10 @@ export function createMockPluginApi(): PluginApi & {
     registerTool: (tool: {
       name: string;
       description: string;
-      inputSchema: Record<string, unknown>;
-      handler: ToolHandler;
+      parameters: Record<string, unknown>;
+      execute: ToolExecutor;
     }) => {
-      tools.set(tool.name, { handler: tool.handler, description: tool.description });
+      tools.set(tool.name, { executor: tool.execute, description: tool.description });
     },
 
     registerService: (service: MockService) => {
@@ -67,7 +67,7 @@ export async function callTool(
     throw new Error(`Tool "${toolName}" not registered. Available: ${Array.from(tools.keys()).join(", ")}`);
   }
   
-  return tool.handler(params);
+  return tool.executor("test-id", params);
 }
 
 export function parseToolResponse<T = unknown>(response: { content: Array<{ type: string; text: string }> }): T {
