@@ -2,21 +2,21 @@
 
 SQLite-based task queue with atomic operations for AI agents.
 
-## 核心价值 | Core Value
+## Core Value
 
-**一句话概括**: 让 AI 自己管理任务队列，实现「用户提交任务 → AI 自动拆分 → 定时领取 → 执行 → 反馈」的完全自动化。
+AI-driven task queue automation: user submits task → AI decomposes → scheduled claim → execution → feedback loop.
 
 ## Features
 
-- **AI 自驱闭环** - 定时自动领取任务执行，无需人工干预
-- **SQLite + WAL 模式** - 单文件数据库，高并发支持
-- **原子任务领取** - CAS 防止重复处理
-- **自动超时恢复** - 卡住的任务自动回收
-- **重试机制** - 失败任务自动重试
-- **优先级队列** - 按优先级和创建时间处理
-- **定时任务** - 支持延迟到指定时间执行
-- **任务追踪** - 完整的状态和历史记录
-- **内置 Cron** - 自动定时处理任务队列
+- **AI-Driven Automation** - Scheduled automatic task execution without manual intervention
+- **SQLite + WAL Mode** - Single file database with high concurrency support
+- **Atomic Task Claim** - CAS prevents duplicate processing
+- **Auto Timeout Recovery** - Stuck tasks automatically recycled
+- **Retry Mechanism** - Failed tasks auto-retry with configurable limits
+- **Priority Queue** - Process by priority and creation time
+- **Scheduled Tasks** - Support delayed execution
+- **Task Tracking** - Complete status and history
+- **Built-in Cron** - Automatic periodic task queue processing
 
 ## Installation
 
@@ -32,12 +32,12 @@ openclaw plugins install @openclaw-task-queue/core
 npm install @openclaw-task-queue/core better-sqlite3
 ```
 
-## 工作流 | Workflow
+## Workflow
 
 ```
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  用户提交    │───▶│   AI 拆分   │───▶│  定时领取   │───▶│   执行任务  │───▶│   反馈结果  │
-│  任务需求   │    │  任务队列   │    │  任务队列   │    │  后台处理   │    │   给用户   │
+│    User     │───▶│ AI Decompose│───▶│  Scheduled │───▶│   Execute   │───▶│   Feedback  │
+│  Submits   │    │   Tasks     │    │   Claim    │    │   Task      │    │   to User   │
 └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
 ```
 
@@ -48,83 +48,83 @@ npm install @openclaw-task-queue/core better-sqlite3
 After installation, the following tools are automatically available:
 
 ```
-User: 帮我分析这个大型数据集
+User: Analyze this large dataset
 
 Agent: [Uses task_create]
-✅ 已创建任务 task-xxx
+✅ Created task task-xxx
 ```
 
-### Demo | 演示
+### Demo
 
-#### 1. 创建任务
-
-```
-User: 创建一个简单的测试任务
-
-Agent: [调用 task_create]
-✅ 已创建简单测试任务 
-
-| 项目 | 详情 |
-|------|------|
-| 任务ID | task-xxx |
-| 类型 | test |
-| 优先级 | low |
-| 状态 | ⏳ PENDING |
-```
-
-#### 2. 获取统计
+#### 1. Create Task
 
 ```
-User: 获取任务统计
+User: Create a simple test task
 
-Agent: [调用 task_stats]
-任务统计结果：
+Agent: [Calls task_create]
+✅ Created simple test task
 
-| 状态 | 数量 |
-|------|------|
+| Field | Value |
+|-------|-------|
+| Task ID | task-xxx |
+| Type | test |
+| Priority | low |
+| Status | ⏳ PENDING |
+```
+
+#### 2. Get Stats
+
+```
+User: Get task statistics
+
+Agent: [Calls task_stats]
+Task statistics:
+
+| Status | Count |
+|--------|-------|
 | ⏳ PENDING | 3 |
 | 🔄 RUNNING | 0 |
 | ✅ COMPLETED | 0 |
 | ❌ FAILED | 0 |
 ```
 
-#### 3. 列出任务
+#### 3. List Tasks
 
 ```
-User: 列出所有待处理任务
+User: List all pending tasks
 
-Agent: [调用 task_list]
-待处理任务列表：
+Agent: [Calls task_list]
+Pending tasks:
 
-| 序号 | 任务ID | 类型 | 优先级 |
-|------|--------|------|--------|
+| # | Task ID | Type | Priority |
+|---|---------|------|----------|
 | 1 | task-xxx | test | 5 |
 | 2 | task-yyy | analysis | 10 |
 ```
 
-#### 4. 查看状态
+#### 4. Check Status
 
 ```
-User: 查看任务 xxx 的状态
+User: Check status of task xxx
 
-Agent: [调用 task_status]
-任务状态:
+Agent: [Calls task_status]
+Task status:
 
-| 项目 | 详情 |
-|------|------|
-| 任务ID | task-xxx |
-| 状态 | ⏳ PENDING |
-| 优先级 | 5 |
-| 创建时间 | 2026-03-13 12:00:00 |
+| Field | Value |
+|-------|-------|
+| Task ID | task-xxx |
+| Status | ⏳ PENDING |
+| Priority | 5 |
+| Created | 2026-03-13 12:00:00 |
 ```
 
-#### 5. 取消任务
+#### 5. Cancel Task
 
 ```
-User: 取消任务 task-xxx
+User: Cancel task task-xxx
 
-Agent: [调用 task_cancel]
-已成功取消任务 task-xxx ✅
+Agent: [Calls task_cancel]
+✅ Task cancelled successfully
 ```
 
 ### Standalone Usage
@@ -393,46 +393,46 @@ PENDING → cancel() → FAILED (not retryable)
 | cronEnabled | boolean | true | Enable built-in cron |
 | cronIntervalMs | number | 60000 | Cron interval |
 
-## 长运行 Agent | Long-Running Agent
+## Long-Running Agent
 
-### 核心思路
+### Core Concept
 
-利用任务队列 + 内置 Cron，构建自主工作的 AI Agent:
+Build autonomous AI Agent using task queue + built-in Cron:
 
-1. **任务入口**: 用户通过对话提交任务
-2. **任务拆分**: AI 自动拆分为可执行的子任务
-3. **定时领取**: Cron 自动检查并领取任务
-4. **执行反馈**: 执行完成后更新状态并通知用户
+1. **Task Entry**: User submits task via conversation
+2. **Task Decomposition**: AI splits into executable subtasks
+3. **Scheduled Claim**: Cron automatically checks and claims tasks
+4. **Execution Feedback**: Update status and notify user after execution
 
-### 配置示例
+### Example
 
 ```javascript
-// 用户提交: "帮我重构这个项目"
+// User submits: "Refactor this project"
 
-// 1. AI 使用 task_create 创建任务
+// 1. AI creates main task
 await taskCreate({
   type: "code-refactor",
-  payload: { target: "整个项目" }
+  payload: { target: "entire project" }
 });
 
-// 2. AI 拆分为子任务
+// 2. AI decomposes into subtasks
 await taskCreate({ type: "analyze", payload: {...} });
 await taskCreate({ type: "refactor-module-a", payload: {...} });
 await taskCreate({ type: "refactor-module-b", payload: {...} });
 await taskCreate({ type: "test", payload: {...} });
 
-// 3. 内置 Cron 自动领取并执行
-// cronIntervalMs = 60000 (每分钟检查一次)
+// 3. Built-in Cron auto-claims and executes
+// cronIntervalMs = 60000 (check every minute)
 ```
 
 ## Architecture
 
-### 为什么用 SQLite?
+### Why SQLite?
 
-- **无外部依赖** - 不需要 Redis、PostgreSQL 等
-- **单文件** - 易于备份、迁移和调试
-- **WAL 模式** - 更好的并发读写性能
-- **原子操作** - CAS 防止竞态条件
+- **No External Dependencies** - No Redis, PostgreSQL, etc.
+- **Single File** - Easy backup, migration, debugging
+- **WAL Mode** - Better concurrent read/write performance
+- **Atomic Operations** - CAS prevents race conditions
 
 ### Atomic Task Claiming
 
@@ -451,10 +451,10 @@ AND status = 'PENDING'  -- CAS check!
 RETURNING *;
 ```
 
-这个语句原子地:
-1. 找到最高优先级的待处理任务
-2. 仅在仍为 PENDING 时领取 (防止竞态)
-3. 返回被领取的任务
+This statement atomically:
+1. Finds highest priority pending task
+2. Only claims if still PENDING (prevents race)
+3. Returns the claimed task
 
 ### Database Schema
 
