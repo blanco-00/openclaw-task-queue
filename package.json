@@ -1,0 +1,63 @@
+{
+  "name": "@openclaw-task-queue/core",
+  "version": "1.0.0",
+  "description": "SQLite-based task queue with atomic operations for AI agents. Works standalone or as OpenClaw plugin.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "task-queue",
+    "job-queue",
+    "sqlite",
+    "ai-agent",
+    "concurrent",
+    "atomic"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/openclaw-task-queue.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/openclaw-task-queue/issues"
+  },
+  "homepage": "https://github.com/yourusername/openclaw-task-queue#readme",
+  "peerDependencies": {
+    "openclaw": ">=2026.0.0"
+  },
+  "peerDependenciesMeta": {
+    "openclaw": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"]
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

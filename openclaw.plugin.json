@@ -1,0 +1,54 @@
+{
+  "id": "task-queue",
+  "name": "Task Queue",
+  "description": "SQLite-based task queue with atomic operations for AI agents. Supports concurrent workers, retry, and scheduled tasks.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "dbPath": {
+        "type": "string",
+        "default": "~/.openclaw/task-queue.db",
+        "description": "SQLite database path for task storage"
+      },
+      "concurrency": {
+        "type": "integer",
+        "default": 1,
+        "minimum": 1,
+        "description": "Number of concurrent task workers"
+      },
+      "pollIntervalMs": {
+        "type": "integer",
+        "default": 5000,
+        "minimum": 1000,
+        "description": "Worker poll interval in milliseconds"
+      },
+      "maxRetries": {
+        "type": "integer",
+        "default": 3,
+        "minimum": 0,
+        "description": "Maximum retry attempts for failed tasks"
+      },
+      "timeoutSeconds": {
+        "type": "integer",
+        "default": 300,
+        "minimum": 60,
+        "description": "Task execution timeout in seconds"
+      },
+      "enableWorker": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable automatic task worker"
+      }
+    }
+  },
+  "uiHints": {
+    "dbPath": { "label": "Database Path", "placeholder": "~/.openclaw/task-queue.db" },
+    "concurrency": { "label": "Concurrency", "placeholder": "1" },
+    "pollIntervalMs": { "label": "Poll Interval (ms)", "placeholder": "5000" },
+    "maxRetries": { "label": "Max Retries", "placeholder": "3" },
+    "timeoutSeconds": { "label": "Timeout (seconds)", "placeholder": "300" },
+    "enableWorker": { "label": "Enable Worker" }
+  }
+}

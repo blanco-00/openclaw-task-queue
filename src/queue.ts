@@ -1,0 +1,297 @@
+import Database from "better-sqlite3";
+import * as path from "path";
+import * as os from "os";
+import * as fs from "fs";
+import { v4 as uuidv4 } from "uuid";
+import {
+  Task,
+  TaskRecord,
+  TaskStatus,
+  TaskPriority,
+  CreateTaskOptions,
+  ListTasksOptions,
+  TaskQueueConfig,
+  TaskStatusResponse,
+} from "./types";
+
+type InternalConfig = {
+  dbPath: string;
+  maxRetries: number;
+  timeoutSeconds: number;
+  concurrency: number;
+  pollIntervalMs: number;
+};
+
+export class TaskQueue {
+  private db: Database.Database;
+  private config: InternalConfig;
+
+  constructor(config: TaskQueueConfig) {
+    this.config = {
+      dbPath: config.dbPath ?? path.join(os.homedir(), ".openclaw/task-queue.db"),
+      maxRetries: config.maxRetries ?? 3,
+      timeoutSeconds: config.timeoutSeconds ?? 300,
+      concurrency: config.concurrency ?? 1,
+      pollIntervalMs: config.pollIntervalMs ?? 5000,
+    };
+
+    if (this.config.dbPath !== ":memory:") {
+      const dbDir = path.dirname(this.config.dbPath);
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
+      }
+    }
+
+    this.db = new Database(this.config.dbPath);
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("synchronous = NORMAL");
+    this.initializeSchema();
+  }
+
+  private initializeSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        type TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        priority INTEGER DEFAULT 0,
+        
+        status TEXT DEFAULT 'PENDING',
+        retry_count INTEGER DEFAULT 0,
+        max_retries INTEGER DEFAULT 3,
+        
+        claimed_at DATETIME,
+        claimed_by TEXT,
+        timeout_seconds INTEGER DEFAULT 300,
+        
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        started_at DATETIME,
+        completed_at DATETIME,
+        scheduled_at DATETIME,
+        
+        result TEXT,
+        error TEXT,
+        
+        source_channel TEXT,
+        source_conversation TEXT,
+        source_message TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_tasks_claimable 
+      ON tasks(status, priority DESC, created_at ASC)
+      WHERE status IN ('PENDING', 'RUNNING');
+
+      CREATE INDEX IF NOT EXISTS idx_tasks_scheduled 
+      ON tasks(scheduled_at, status)
+      WHERE status = 'PENDING' AND scheduled_at IS NOT NULL;
+
+      CREATE INDEX IF NOT EXISTS idx_tasks_status 
+      ON tasks(status, created_at DESC);
+    `);
+  }
+
+  async createTask(options: CreateTaskOptions): Promise<string> {
+    const id = `task-${Date.now()}-${uuidv4().slice(0, 8)}`;
+    
+    const stmt = this.db.prepare(`
+      INSERT INTO tasks (
+        id, type, payload, priority, max_retries, timeout_seconds,
+        scheduled_at, source_channel, source_conversation, source_message
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      options.type,
+      JSON.stringify(options.payload),
+      options.priority ?? TaskPriority.MEDIUM,
+      options.maxRetries ?? this.config.maxRetries,
+      options.timeoutSeconds ?? this.config.timeoutSeconds,
+      options.scheduledAt?.toISOString() ?? null,
+      options.source?.channel ?? null,
+      options.source?.conversation ?? null,
+      options.source?.message ?? null
+    );
+
+    return id;
+  }
+
+  async claimTask(workerId: string): Promise<Task | null> {
+    const claimStmt = this.db.prepare(`
+      UPDATE tasks
+      SET status = 'RUNNING',
+          claimed_at = CURRENT_TIMESTAMP,
+          claimed_by = ?,
+          started_at = CURRENT_TIMESTAMP
+      WHERE id = (
+        SELECT id FROM tasks
+        WHERE status = 'PENDING'
+          AND (scheduled_at IS NULL OR scheduled_at <= CURRENT_TIMESTAMP)
+        ORDER BY priority DESC, created_at ASC
+        LIMIT 1
+      )
+      AND status = 'PENDING'
+      RETURNING *
+    `);
+
+    const result = claimStmt.get(workerId) as TaskRecord | undefined;
+
+    if (!result) {
+      return null;
+    }
+
+    return this.parseTask(result);
+  }
+
+  async completeTask(taskId: string, result?: Record<string, unknown>): Promise<void> {
+    const stmt = this.db.prepare(`
+      UPDATE tasks
+      SET status = 'COMPLETED',
+          completed_at = CURRENT_TIMESTAMP,
+          result = ?
+      WHERE id = ? AND status = 'RUNNING'
+    `);
+
+    const changes = stmt.run(JSON.stringify(result ?? {}), taskId);
+
+    if (changes.changes === 0) {
+      throw new Error(`Task ${taskId} not found or not in RUNNING state`);
+    }
+  }
+
+  async failTask(taskId: string, error: string): Promise<void> {
+    const task = await this.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task ${taskId} not found`);
+    }
+
+    if (task.retry_count >= task.max_retries) {
+      const stmt = this.db.prepare(`
+        UPDATE tasks
+        SET status = 'DEAD',
+            error = ?,
+            completed_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `);
+      stmt.run(error, taskId);
+    } else {
+      const stmt = this.db.prepare(`
+        UPDATE tasks
+        SET status = 'PENDING',
+            retry_count = retry_count + 1,
+            claimed_at = NULL,
+            claimed_by = NULL,
+            started_at = NULL,
+            error = ?
+        WHERE id = ?
+      `);
+      stmt.run(error, taskId);
+    }
+  }
+
+  async reclaimTimeoutTasks(): Promise<number> {
+    const stmt = this.db.prepare(`
+      UPDATE tasks
+      SET status = 'PENDING',
+          claimed_at = NULL,
+          claimed_by = NULL,
+          started_at = NULL,
+          retry_count = retry_count + 1
+      WHERE status = 'RUNNING'
+        AND started_at < datetime('now', '-' || timeout_seconds || ' seconds')
+        AND retry_count < max_retries
+    `);
+
+    const result = stmt.run();
+    return result.changes;
+  }
+
+  async getTask(taskId: string): Promise<Task | null> {
+    const stmt = this.db.prepare(`
+      SELECT * FROM tasks WHERE id = ?
+    `);
+
+    const result = stmt.get(taskId) as TaskRecord | undefined;
+    return result ? this.parseTask(result) : null;
+  }
+
+  async getTaskStatus(taskId: string): Promise<TaskStatusResponse | null> {
+    const stmt = this.db.prepare(`
+      SELECT id, status, retry_count as retryCount, created_at as createdAt, started_at as startedAt, completed_at as completedAt, error
+      FROM tasks
+      WHERE id = ?
+    `);
+
+    const result = stmt.get(taskId) as TaskStatusResponse | undefined;
+    return result ?? null;
+  }
+
+  async listTasks(options: ListTasksOptions = {}): Promise<Task[]> {
+    let sql = "SELECT * FROM tasks WHERE 1=1";
+    const params: unknown[] = [];
+
+    if (options.status) {
+      sql += " AND status = ?";
+      params.push(options.status);
+    }
+
+    if (options.type) {
+      sql += " AND type = ?";
+      params.push(options.type);
+    }
+
+    sql += " ORDER BY created_at DESC LIMIT ?";
+    params.push(options.limit ?? 100);
+
+    if (options.offset) {
+      sql += " OFFSET ?";
+      params.push(options.offset);
+    }
+
+    const stmt = this.db.prepare(sql);
+    const results = stmt.all(...params) as TaskRecord[];
+
+    return results.map((r) => this.parseTask(r));
+  }
+
+  async getTaskCounts(): Promise<Record<string, number>> {
+    const stmt = this.db.prepare(`
+      SELECT status, COUNT(*) as count
+      FROM tasks
+      GROUP BY status
+    `);
+
+    const results = stmt.all() as Array<{ status: string; count: number }>;
+    const counts: Record<string, number> = {};
+
+    for (const { status, count } of results) {
+      counts[status] = count;
+    }
+
+    return counts;
+  }
+
+  async cleanupOldTasks(olderThanDays: number = 30): Promise<number> {
+    const stmt = this.db.prepare(`
+      DELETE FROM tasks
+      WHERE status IN ('COMPLETED', 'DEAD')
+        AND completed_at < datetime('now', '-' || ? || ' days')
+    `);
+
+    const result = stmt.run(olderThanDays);
+    return result.changes;
+  }
+
+  close(): void {
+    this.db.close();
+  }
+
+  private parseTask(record: TaskRecord): Task {
+    return {
+      ...record,
+      payload: JSON.parse(record.payload),
+      result: record.result ? JSON.parse(record.result) : undefined,
+    } as Task;
+  }
+}
